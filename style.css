@@ -74,6 +74,7 @@ details.rules-box summary{cursor:pointer;font-weight:700;color:var(--ink)}
 .msg.q{cursor:pointer} .msg.q:hover{border-color:var(--ink-2)}
 .msg.best{border:2px solid var(--teal)}
 .msg.live{border:2px solid var(--red);background:var(--red-soft)}
+.msg.ended{background:var(--paper);border-style:dashed;color:var(--muted)}
 .msg.pending{opacity:.75;border-style:dashed}
 .msg .meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:.88rem;color:var(--muted);margin-bottom:4px}
 .msg .body{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
