@@ -270,7 +270,7 @@ function msgHtml(m, opts = {}) {
   const r = S.rooms.find((x) => x.id === m.room_id);
   const q = m.parent_id ? roomState.msgs.find((x) => x.id === m.parent_id) : null;
   const mine = m.author_id === S.user.id;
-  const cls = ['msg', opts.q ? 'q' : '', m.is_best ? 'best' : '', m.kind === 'live' ? 'live' : '', m.pending ? 'pending' : ''].join(' ');
+  const cls = ['msg', opts.q ? 'q' : '', m.is_best ? 'best' : '', m.kind === 'live' ? (m.live_ended_at || !m.live_url ? 'ended' : 'live') : '', m.pending ? 'pending' : ''].join(' ');
   let body = '';
   if (m.deleted_at) body = `<div class="body muted"><i>Deleted by a moderator.</i> ${isMod() ? esc(m.body) : ''}</div>`;
   else {
@@ -279,7 +279,17 @@ function msgHtml(m, opts = {}) {
       const img = /^image\//.test(m.attachment_mime || '');
       body += `<div data-file="${esc(m.attachment_path)}" data-img="${img ? 1 : ''}" data-name="${esc(m.attachment_name)}"><span class="small muted">Loading file…</span></div>`;
     }
-    if (m.kind === 'live') body = `<div class="body"><b>🔴 Live ${m.live_mode === 'voice' ? 'voice' : 'video'} session</b>${m.body ? ': ' + esc(m.body) : ''}</div><div class="row" style="margin-top:8px"><button class="btn red sm" data-act="joinlive" data-id="${m.id}">Join session</button><span class="small muted">You will join muted. The host can unmute you to ask a question.</span></div>`;
+    if (m.kind === 'live') {
+      const kindTxt = m.live_mode === 'voice' ? 'voice' : 'video';
+      if (m.live_ended_at || !m.live_url) {
+        const mins = m.live_ended_at ? Math.max(1, Math.round((new Date(m.live_ended_at) - new Date(m.created_at)) / 60000)) : null;
+        body = `<div class="body"><b>⚪ ${kindTxt[0].toUpperCase() + kindTxt.slice(1)} session ended</b>${m.body ? ': ' + esc(m.body) : ''}</div><div class="small muted">Ended ${m.live_ended_at ? fmt(m.live_ended_at) : ''}${mins ? ` · lasted ${mins} min` : ''}. Ask follow-up questions below.</div>`;
+      } else {
+        const until = new Date(new Date(m.created_at).getTime() + (m.live_minutes || 90) * 60000);
+        const canEnd = m.author_id === S.user.id || isMod();
+        body = `<div class="body"><b>🔴 Live ${kindTxt} session now</b>${m.body ? ': ' + esc(m.body) : ''}</div><div class="row" style="margin-top:8px"><button class="btn red sm" data-act="joinlive" data-id="${m.id}">Join session</button>${canEnd ? `<button class="btn sm ghost" data-act="endlive" data-id="${m.id}">End session for everyone</button>` : ''}</div><div class="small muted" style="margin-top:6px">You will join muted. The host can unmute you to ask a question. Closes automatically at ${until.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}.</div>`;
+      }
+    }
   }
   const replies = opts.q ? roomState.msgs.filter((x) => x.parent_id === m.id && !x.deleted_at).length : 0;
   const acts = [];
@@ -332,7 +342,7 @@ async function viewRoom(id, threadId, keep) {
       ${composerHtml(room, threadId)}`;
   } else {
     const qs = roomState.msgs.filter((m) => !m.parent_id && (!m.deleted_at || isMod())).reverse();
-    const lives = qs.filter((m) => m.kind === 'live' && !m.deleted_at && (Date.now() - new Date(m.created_at)) < 4 * 3600e3);
+    const lives = qs.filter((m) => m.kind === 'live' && !m.deleted_at && !m.live_ended_at && m.live_url);
     const rest = qs.filter((m) => !lives.includes(m));
     app.innerHTML = pushBox() + `<div class="spread"><h1 style="margin-bottom:0">${esc(room.name)}</h1>
       ${rm ? `<select id="notify" aria-label="Alerts for this room" style="width:auto;min-height:36px;padding:4px 8px"><option value="all" ${rm.notify === 'all' ? 'selected' : ''}>Alerts: everything</option><option value="mine" ${rm.notify === 'mine' ? 'selected' : ''}>Alerts: replies to me</option><option value="none" ${rm.notify === 'none' ? 'selected' : ''}>Alerts: off</option></select>` : ''}</div>
@@ -607,17 +617,19 @@ document.addEventListener('click', async (e) => {
       const room = S.rooms.find((r) => r.id === roomState.id);
       openModal(`<h2 style="margin-top:0">Start a live session</h2><form id="lform">
         <label for="l_mode">Type</label><select id="l_mode"><option value="voice">Voice only</option><option value="video">Video</option></select>
+        <label for="l_min">Session length</label><select id="l_min"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90" selected>1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option></select>
         <label for="l_topic">Topic</label><input id="l_topic" maxlength="200" placeholder="e.g. HR round tips – Q&A">
-        <p class="small muted">Everyone joins muted. As host, use “Mute everyone” and ask people to raise a hand, then unmute them one by one. The first person to open the session becomes host; Jitsi may ask you to sign in with Google once.</p>
+        <p class="small muted">When you finish, tap <b>End session for everyone</b> in the room so the Join button disappears. If you forget, it closes automatically at the chosen length. Everyone joins muted. As host, use “Mute everyone” and ask people to raise a hand, then unmute them one by one. The first person to open the session becomes host; Jitsi may ask you to sign in with Google once.</p>
         <div class="row"><button class="btn red">Start and notify room</button><button type="button" class="btn ghost" data-close>Cancel</button></div></form>`);
       $('#lform').addEventListener('submit', async (ev) => { ev.preventDefault();
         const rnd = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
         const url = `https://meet.jit.si/VKV-${room.slug}-${rnd}`;
-        const { data, error } = await sb.from('messages').insert({ room_id: room.id, author_id: S.user.id, kind: 'live', live_url: url, live_mode: $('#l_mode').value, body: $('#l_topic').value.trim() }).select().single();
+        const { data, error } = await sb.from('messages').insert({ room_id: room.id, author_id: S.user.id, kind: 'live', live_url: url, live_mode: $('#l_mode').value, live_minutes: parseInt($('#l_min').value, 10), body: $('#l_topic').value.trim() }).select().single();
         if (error) { toast(errMsg(error), true); return; }
         closeModal(); openLive(data); await loadRoomMsgs(room.id); route(true); });
       break; }
-    case 'joinlive': { const m = roomState.msgs.find((x) => x.id === id); if (m) openLive(m); break; }
+    case 'endlive': if (confirm('End this session for everyone? The Join button will be removed from the room. Also tap "End meeting for all" inside Jitsi.')) run('end_live', { p_msg: id }, 'Session ended.'); break;
+    case 'joinlive': { const m = roomState.msgs.find((x) => x.id === id); if (m && m.live_url && !m.live_ended_at && new Date(m.created_at).getTime() + (m.live_minutes || 90) * 60000 > Date.now()) openLive(m); else { toast('This session has ended.', true); await loadRoomMsgs(roomState.id); route(true); } break; }
   }
 });
 function openLive(m) {
