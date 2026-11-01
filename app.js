@@ -105,6 +105,7 @@ function viewLogin() {
     </ul>
     ${inv ? '<div class="notice teal">You have an invite link. Sign in to join the room.</div>' : ''}
     <p><button class="btn gold" data-act="login">Continue with Google</button></p>
+    <p class="small"><b>Already a member?</b> Sign in with the same Gmail you used before. You won't need to fill the form again.</p>
     <p class="small muted">${esc(PRIVACY)}</p>
   </section>`;
 }
@@ -201,7 +202,8 @@ function viewRegister() {
         p_domain: v('#f_domain') || null, p_prev: v('#f_prev') || null, p_linkedin: v('#f_li') || null, p_willing: $('#f_willing').checked,
         p_agree_rules: true, p_agree_data: true });
       toast('Welcome, ' + h);
-      await loadMe(); await loadCore(); await processInvite(); renderNav(); route();
+      await loadMe(); await loadCore(); await processInvite(); renderNav();
+      if ('Notification' in window && Notification.permission !== 'granted') { S.afterAlerts = location.hash || '#/'; location.hash = '#/alerts'; } else route();
     } catch (err) { toast(errMsg(err), true); btn.disabled = false; }
   });
 }
@@ -213,7 +215,7 @@ function pushBox() {
   }
   if (Notification.permission === 'granted') return '';
   if (Notification.permission === 'denied') return '<div class="notice red">Alerts are blocked for this site. Allow notifications in your browser settings to get new-question alerts.</div>';
-  return `<div class="notice teal spread"><span>Get an alert on your phone for new questions and answers.</span><button class="btn sm" data-act="push">Turn on alerts</button></div>`;
+  return `<div class="notice red spread"><span><b>Alerts are off on this device.</b> You will miss new questions, answers and live sessions.</span><button class="btn sm gold" data-act="push">Turn on alerts</button></div>`;
 }
 
 function viewHome() {
@@ -332,7 +334,7 @@ async function viewRoom(id, threadId, keep) {
     const qs = roomState.msgs.filter((m) => !m.parent_id && (!m.deleted_at || isMod())).reverse();
     const lives = qs.filter((m) => m.kind === 'live' && !m.deleted_at && (Date.now() - new Date(m.created_at)) < 4 * 3600e3);
     const rest = qs.filter((m) => !lives.includes(m));
-    app.innerHTML = `<div class="spread"><h1 style="margin-bottom:0">${esc(room.name)}</h1>
+    app.innerHTML = pushBox() + `<div class="spread"><h1 style="margin-bottom:0">${esc(room.name)}</h1>
       ${rm ? `<select id="notify" aria-label="Alerts for this room" style="width:auto;min-height:36px;padding:4px 8px"><option value="all" ${rm.notify === 'all' ? 'selected' : ''}>Alerts: everything</option><option value="mine" ${rm.notify === 'mine' ? 'selected' : ''}>Alerts: replies to me</option><option value="none" ${rm.notify === 'none' ? 'selected' : ''}>Alerts: off</option></select>` : ''}</div>
       ${room.objective ? `<p class="muted">${esc(room.objective)}</p>` : ''}
       ${room.whatsapp_channel ? `<p class="small"><a href="${esc(room.whatsapp_channel)}" target="_blank" rel="noopener">Follow this room's WhatsApp Channel</a></p>` : ''}
@@ -370,6 +372,15 @@ async function sendMsg(room, parent) {
     await loadRoomMsgs(room.id); route(true);
     if (row.kind === 'file' && room.image_approval && !isStaff()) toast('Your file will appear after a moderator approves it.');
   } catch (e) { toast(errMsg(e), true); } finally { btn.disabled = false; }
+}
+
+function viewAlerts() {
+  app.innerHTML = `<section class="hero"><h1>One last step: turn on alerts</h1>
+    <p>Get an instant notification on this phone when someone asks a question, answers yours, shares material or starts a live session. For example:</p>
+    <div class="msg"><div class="meta"><b>VKV · GATE CS</b></div><div class="body">ECA-S-2027-CS-482: How to solve integration by parts when…</div></div>
+    <p><button class="btn gold" data-act="push">Turn on alerts</button></p>
+    <p class="small muted">When your phone asks, tap <b>Allow</b>. On iPhone, first tap Share → <b>Add to Home Screen</b>, open VKV from the home screen, then turn on alerts.</p>
+    <p><a href="#/" data-act="skipalerts">Skip for now</a></p></section>`;
 }
 
 // ---------- profile ----------
@@ -421,8 +432,10 @@ async function viewAdmin(tab) {
     }
     if (tab === 'members') {
       const all = [...S.members.values()].sort((a, b) => a.handle.localeCompare(b.handle));
-      el.innerHTML = `<input id="msearch" placeholder="Search by code, e.g. ECA-S-2027" aria-label="Search members"><div class="scroll"><table class="tbl" id="mtable"></table></div>`;
-      const draw = (q) => { $('#mtable').innerHTML = '<tr><th>Member</th><th>Status</th><th></th></tr>' + all.filter((m) => !q || m.handle.toLowerCase().includes(q)).map((m) => `<tr><td>${who(m.id)}</td><td class="small">${m.status === 'banned' ? 'Banned' : m.muted_until && new Date(m.muted_until) > new Date() ? 'Muted' : 'Active'}</td><td><button class="btn sm ghost" data-act="member" data-id="${m.id}">Manage</button></td></tr>`).join(''); };
+      const al = new Map(((await rpc('alerts_status')) || []).map((x) => [x.user_id, x.devices]));
+      const onCount = all.filter((m) => al.get(m.id) > 0).length;
+      el.innerHTML = `<p class="notice ${onCount < all.length ? '' : 'teal'}">Alerts on: <b>${onCount} of ${all.length}</b> members. Members without alerts only see new posts when they open the site.</p><input id="msearch" placeholder="Search by code, e.g. ECA-S-2027" aria-label="Search members"><div class="scroll"><table class="tbl" id="mtable"></table></div>`;
+      const draw = (q) => { $('#mtable').innerHTML = '<tr><th>Member</th><th>Alerts</th><th>Status</th><th></th></tr>' + all.filter((m) => !q || m.handle.toLowerCase().includes(q)).map((m) => `<tr><td>${who(m.id)}</td><td class="small">${al.get(m.id) > 0 ? '🔔 On' : '🔕 Off'}</td><td class="small">${m.status === 'banned' ? 'Banned' : m.muted_until && new Date(m.muted_until) > new Date() ? 'Muted' : 'Active'}</td><td><button class="btn sm ghost" data-act="member" data-id="${m.id}">Manage</button></td></tr>`).join(''); };
       draw(''); $('#msearch').addEventListener('input', (e) => draw(e.target.value.toLowerCase().trim()));
     }
     if (tab === 'rooms') {
@@ -469,7 +482,9 @@ What you get:
 
 🔒 Your privacy: your name, number and email are never shown to other members. You appear only as a code like ECA-S-2027-CS-482.
 ${room.objective ? `\n🎯 Objective: ${room.objective}\n` : ''}
-👉 Join with your Gmail: ${BASE}?inv=${token}${room.whatsapp_channel ? `\n📢 Follow for updates: ${room.whatsapp_channel}` : ''}
+👉 Join with your Gmail: ${BASE}?inv=${token}
+(Already a member? Use the same Gmail. No form again.)
+🔔 After joining, tap "Turn on alerts" to get instant notifications.${room.whatsapp_channel ? `\n📢 Follow for updates: ${room.whatsapp_channel}` : ''}
 
 Please read and follow the community rules shown when you join.`;
 }
@@ -526,7 +541,8 @@ async function enablePush(silent) {
     const j = sub.toJSON();
     const { error } = await sb.from('push_subscriptions').upsert({ endpoint: j.endpoint, user_id: S.user.id, p256dh: j.keys.p256dh, auth: j.keys.auth });
     if (error) throw error;
-    if (!silent) { toast('Alerts are on.'); route(); }
+    if (!silent) { toast('Alerts are on.'); try { reg.showNotification('VKV Community', { body: 'Alerts are on. You will be notified of new questions, answers and live sessions.', icon: 'icon-192.png' }); } catch {}
+      if (S.afterAlerts) { const h = S.afterAlerts; S.afterAlerts = null; location.hash = h; } else route(); }
   } catch (e) { if (!silent) toast('Could not turn on alerts: ' + errMsg(e), true); }
 }
 
@@ -542,6 +558,7 @@ document.addEventListener('click', async (e) => {
       if (error) toast(errMsg(error), true); break; }
     case 'signout': await sb.auth.signOut(); location.href = BASE; break;
     case 'push': enablePush(false); break;
+    case 'skipalerts': S.afterAlerts = null; break;
     case 'open': location.hash = `#/room/${roomState.id}/t/${id}`; break;
     case 'joinroom': try { await rpc('join_room', { p_room: id }); await loadCore(); toast('Joined.'); location.hash = '#/room/' + id; } catch (err) { toast(errMsg(err), true); } break;
     case 'leave': if (confirm('Leave this room? You can rejoin later.')) { const { error } = await sb.from('room_members').delete().eq('room_id', id).eq('user_id', S.user.id); if (error) toast(errMsg(error), true); else { await loadCore(); route(); } } break;
@@ -620,6 +637,7 @@ async function route(keep) {
   try {
     if (h[0] === 'room' && h[1]) return await viewRoom(h[1], h[2] === 't' ? h[3] : null, keep);
     if (h[0] === 'profile') return await viewProfile();
+    if (h[0] === 'alerts') return viewAlerts();
     if (h[0] === 'admin') return await viewAdmin(h[1]);
     return viewHome();
   } catch (e) { app.innerHTML = `<p class="notice red">${esc(errMsg(e))}</p>`; }
