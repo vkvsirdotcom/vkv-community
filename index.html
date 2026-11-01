@@ -1,1 +1,30 @@
-<!doctype html><meta charset="utf-8"><title>VKV Community</title><p>VKV Community – coming soon.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://bfrobrqdqtppkhragwtx.supabase.co https://*.googleusercontent.com; connect-src 'self' https://bfrobrqdqtppkhragwtx.supabase.co wss://bfrobrqdqtppkhragwtx.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>VKV Community</title>
+<meta name="description" content="A private, name-masked Q&A space for students, alumni, faculty and experts.">
+<meta name="theme-color" content="#16324f">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <a href="#/" class="brand" aria-label="VKV Community home"><span class="mark">VKV</span><span class="brand-txt">Community</span></a>
+  <nav id="nav" class="nav"></nav>
+</header>
+<main id="app" tabindex="-1"><p class="loading">Loading…</p></main>
+<div id="modal" class="modal" hidden><div class="sheet" role="dialog" aria-modal="true"><div id="modal-body"></div></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
